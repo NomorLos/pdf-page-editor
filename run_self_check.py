@@ -4,6 +4,7 @@ import tempfile
 from pathlib import Path
 
 from tests.test_office_convert import test_unique_pdf_path_uses_source_stem_and_avoids_overwrite
+from tests.test_pdf_nup import test_make_nup_pdf_outputs_a4_portrait_and_expected_page_counts
 from tests.test_pdf_ops import test_export_and_split_with_chinese_paths
 
 
@@ -12,6 +13,7 @@ def main() -> None:
         root = Path(tmp)
         test_export_and_split_with_chinese_paths(root)
         test_unique_pdf_path_uses_source_stem_and_avoids_overwrite(root / "office")
+        test_make_nup_pdf_outputs_a4_portrait_and_expected_page_counts(root / "nup")
     print("SELF_CHECK_OK")
 
 

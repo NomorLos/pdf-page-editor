@@ -5,8 +5,9 @@
 ## 功能
 
 - 添加一个或多个 PDF
-- 将 Word/PowerPoint 转为 PDF
-- 将转换后的 PDF 直接加入编辑区
+- Word 转 PDF 并进入编辑区，或直接保存为 PDF
+- PPT 转 PDF 并进入编辑区，或直接保存为 PDF
+- PPT 转 PDF 支持不合并、2合1、4合1、6合1、8合1
 - 本地缩略图预览
 - 拖拽重排页面
 - 删除选中页面
@@ -43,11 +44,13 @@ powershell -ExecutionPolicy Bypass -File .\build_exe.ps1
 .\.venv\Scripts\python.exe run_self_check.py
 ```
 
-自检会创建临时中文路径 PDF，验证合并、重排、旋转和拆分。
+自检会创建临时中文路径 PDF，验证合并、重排、旋转、拆分和 PPT 多页合一排版。
 
 ## Office 转 PDF
 
-支持 `.doc`、`.docx`、`.ppt`、`.pptx`。程序会优先调用 Microsoft Office 原生导出 PDF；如果失败，会尝试使用 LibreOffice 命令行转换。转换后的 PDF 可直接保存，也可自动加入当前编辑区继续合并、删页、旋转和导出。
+支持 `.doc`、`.docx`、`.ppt`、`.pptx`。程序会优先调用 Microsoft Office 原生导出 PDF；如果失败，会尝试使用 LibreOffice 命令行转换。
+
+PPT 多页合一只用于 PPT/PPTX 转 PDF。输出固定为 A4 竖版，页面按从左到右、从上到下排列，并保持幻灯片比例居中缩放。
 
 ## 说明
 

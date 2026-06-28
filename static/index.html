@@ -17,8 +17,26 @@
           </div>
         </div>
         <button id="add-files" class="primary">添加 PDF</button>
-        <button id="convert-add" class="secondary">Office 转 PDF 并加入</button>
-        <button id="convert-save" class="secondary">Office 转 PDF 保存</button>
+
+        <div class="side-section">
+          <div class="side-label">PPT 转 PDF</div>
+          <select id="ppt-nup" aria-label="PPT 多页合一">
+            <option value="1">不合并</option>
+            <option value="2">2合1</option>
+            <option value="4">4合1</option>
+            <option value="6">6合1</option>
+            <option value="8">8合1</option>
+          </select>
+          <button id="ppt-add" class="secondary">PPT转PDF并编辑</button>
+          <button id="ppt-save" class="secondary">PPT转PDF保存</button>
+        </div>
+
+        <div class="side-section">
+          <div class="side-label">Word 转 PDF</div>
+          <button id="word-add" class="secondary">Word转PDF并编辑</button>
+          <button id="word-save" class="secondary">Word转PDF保存</button>
+        </div>
+
         <div id="file-list" class="file-list"></div>
       </aside>
 
@@ -49,6 +67,13 @@
       </main>
     </div>
 
+    <div id="busy-overlay" class="busy-overlay" hidden>
+      <div class="busy-panel">
+        <div class="spinner" aria-hidden="true"></div>
+        <div id="busy-title">正在处理</div>
+        <p id="busy-detail">请稍候...</p>
+      </div>
+    </div>
     <div id="toast" class="toast" hidden></div>
 
     <script type="module" src="/app.js"></script>

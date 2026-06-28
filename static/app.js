@@ -7,12 +7,16 @@ const state = {
   pages: [],
   selected: new Set(),
   dragIndex: null,
+  busy: false,
 };
 
 const els = {
   addFiles: document.querySelector("#add-files"),
-  convertAdd: document.querySelector("#convert-add"),
-  convertSave: document.querySelector("#convert-save"),
+  pptAdd: document.querySelector("#ppt-add"),
+  pptSave: document.querySelector("#ppt-save"),
+  wordAdd: document.querySelector("#word-add"),
+  wordSave: document.querySelector("#word-save"),
+  pptNup: document.querySelector("#ppt-nup"),
   fileList: document.querySelector("#file-list"),
   docCount: document.querySelector("#doc-count"),
   pageGrid: document.querySelector("#page-grid"),
@@ -25,12 +29,17 @@ const els = {
   splitRanges: document.querySelector("#split-ranges"),
   splitBtn: document.querySelector("#split-btn"),
   exportBtn: document.querySelector("#export-btn"),
+  busyOverlay: document.querySelector("#busy-overlay"),
+  busyTitle: document.querySelector("#busy-title"),
+  busyDetail: document.querySelector("#busy-detail"),
   toast: document.querySelector("#toast"),
 };
 
 els.addFiles.addEventListener("click", addFiles);
-els.convertAdd.addEventListener("click", convertOfficeAndAdd);
-els.convertSave.addEventListener("click", convertOfficeAndSave);
+els.pptAdd.addEventListener("click", () => convertOffice("ppt", "add"));
+els.pptSave.addEventListener("click", () => convertOffice("ppt", "save"));
+els.wordAdd.addEventListener("click", () => convertOffice("word", "add"));
+els.wordSave.addEventListener("click", () => convertOffice("word", "save"));
 els.rotateLeft.addEventListener("click", () => rotateSelected(-90));
 els.rotateRight.addEventListener("click", () => rotateSelected(90));
 els.deletePages.addEventListener("click", deleteSelected);
@@ -42,7 +51,7 @@ els.splitBtn.addEventListener("click", splitPdf);
 refreshControls();
 
 async function addFiles() {
-  setBusy(true);
+  setBusy(true, "正在添加 PDF", "请选择文件并等待页面加载。");
   try {
     const data = await api("/api/open-files", {});
     if (data.cancelled) return;
@@ -55,28 +64,24 @@ async function addFiles() {
   }
 }
 
-async function convertOfficeAndAdd() {
-  setBusy(true);
+async function convertOffice(kind, mode) {
+  const isPpt = kind === "ppt";
+  const action = mode === "add" ? "并加入编辑区" : "并保存";
+  const label = isPpt ? "PPT" : "Word";
+  const nup = isPpt ? Number.parseInt(els.pptNup.value, 10) : 1;
+  const nupText = isPpt && nup > 1 ? `，${nup}合1` : "";
+  setBusy(true, `正在转换 ${label}`, `正在生成 PDF${nupText}${action}。`);
   try {
-    const data = await api("/api/convert-office-add", {});
+    const data = await api(`/api/convert-${kind}-${mode}`, { nup });
     if (data.cancelled) return;
-    addDocumentsToWorkspace(data.documents);
-    const engines = summarizeEngines(data.converted);
-    toast(`已转换并加入 ${data.documents.length} 个文件${engines}`);
-  } catch (err) {
-    toast(err.message, true);
-  } finally {
-    setBusy(false);
-  }
-}
-
-async function convertOfficeAndSave() {
-  setBusy(true);
-  try {
-    const data = await api("/api/convert-office-save", {});
-    if (data.cancelled) return;
-    const engines = summarizeEngines(data.results);
-    toast(`已转换 ${data.results.length} 个 PDF${engines}`);
+    if (mode === "add") {
+      addDocumentsToWorkspace(data.documents);
+      const engines = summarizeEngines(data.converted);
+      toast(`已转换并加入 ${data.documents.length} 个文件${engines}`);
+    } else {
+      const engines = summarizeEngines(data.results);
+      toast(`已转换 ${data.results.length} 个 PDF${engines}`);
+    }
   } catch (err) {
     toast(err.message, true);
   } finally {
@@ -205,7 +210,7 @@ function clearSelection() {
 
 async function exportPdf() {
   if (!state.pages.length) return;
-  setBusy(true);
+  setBusy(true, "正在导出 PDF", "请选择保存位置并等待写入完成。");
   try {
     const data = await api("/api/export", {
       pages: state.pages.map(({ fileId, pageIndex, rotation }) => ({ fileId, pageIndex, rotation })),
@@ -232,7 +237,7 @@ async function splitPdf() {
     toast("拆分范围模式适用于单个 PDF；多个文件请先导出合并结果。", true);
     return;
   }
-  setBusy(true);
+  setBusy(true, "正在拆分 PDF", "请选择输出文件夹并等待拆分完成。");
   try {
     const data = await api("/api/split", {
       ranges: ranges.map((range) => ({ fileId: firstFile, ...range })),
@@ -310,20 +315,23 @@ function refreshControls() {
     els.exportBtn,
     els.splitBtn,
   ]) {
-    button.disabled = !hasPages;
+    button.disabled = state.busy || !hasPages;
   }
-  els.rotateLeft.disabled = !hasSelection;
-  els.rotateRight.disabled = !hasSelection;
-  els.deletePages.disabled = !hasSelection;
-  els.clearSelect.disabled = !hasSelection;
+  els.rotateLeft.disabled = state.busy || !hasSelection;
+  els.rotateRight.disabled = state.busy || !hasSelection;
+  els.deletePages.disabled = state.busy || !hasSelection;
+  els.clearSelect.disabled = state.busy || !hasSelection;
 }
 
-function setBusy(busy) {
-  els.addFiles.disabled = busy;
-  els.convertAdd.disabled = busy;
-  els.convertSave.disabled = busy;
-  els.exportBtn.disabled = busy || !state.pages.length;
-  els.splitBtn.disabled = busy || !state.pages.length;
+function setBusy(busy, title = "正在处理", detail = "请稍候...") {
+  state.busy = busy;
+  for (const control of [els.addFiles, els.pptAdd, els.pptSave, els.wordAdd, els.wordSave, els.pptNup]) {
+    control.disabled = busy;
+  }
+  els.busyTitle.textContent = title;
+  els.busyDetail.textContent = detail;
+  els.busyOverlay.hidden = !busy;
+  refreshControls();
 }
 
 function toast(message, isError = false) {
