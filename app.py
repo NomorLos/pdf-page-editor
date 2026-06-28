@@ -38,6 +38,7 @@ def resource_path(*parts: str) -> Path:
 app = Flask(__name__, static_folder=str(resource_path("static")), static_url_path="")
 library = PdfLibrary()
 dialog_lock = threading.Lock()
+ppt_sources: dict[str, dict] = {}
 
 
 @app.get("/")
@@ -62,9 +63,7 @@ def convert_word_add():
 
 @app.post("/api/convert-ppt-add")
 def convert_ppt_add():
-    payload = request.get_json(force=True) if request.data else {}
-    nup = int(payload.get("nup") or 1)
-    return convert_office_add(file_kind="ppt", nup=nup)
+    return convert_office_add(file_kind="ppt", nup=1)
 
 
 @app.post("/api/convert-word-save")
@@ -77,6 +76,38 @@ def convert_ppt_save():
     payload = request.get_json(force=True) if request.data else {}
     nup = int(payload.get("nup") or 1)
     return convert_office_save(file_kind="ppt", nup=nup)
+
+
+@app.post("/api/refresh-ppt-nup")
+def refresh_ppt_nup():
+    try:
+        payload = request.get_json(force=True)
+        nup = int(payload.get("nup") or 1)
+        doc_ids = [str(item) for item in payload.get("docIds", [])]
+        if not doc_ids:
+            doc_ids = list(ppt_sources.keys())
+
+        refreshed = []
+        for doc_id in doc_ids:
+            source = ppt_sources.get(doc_id)
+            if not source:
+                continue
+            base_pdf = Path(source["basePdf"])
+            target_dir = Path(source["targetDir"])
+            if nup <= 1:
+                final_pdf = base_pdf
+            else:
+                final_pdf = unique_pdf_path(target_dir, f"{base_pdf.stem}-{nup}合1.pdf")
+                make_nup_pdf(base_pdf, final_pdf, nup)
+            doc = library.replace_path(doc_id, final_pdf, name=final_pdf.name)
+            source["currentPdf"] = str(final_pdf)
+            source["nup"] = nup
+            refreshed.append(describe_ppt_doc(doc))
+
+        return jsonify({"cancelled": False, "documents": refreshed})
+    except Exception as exc:
+        write_error_log(exc)
+        return error_response(exc)
 
 
 def convert_office_add(file_kind: str, nup: int = 1):
@@ -94,10 +125,18 @@ def convert_office_add(file_kind: str, nup: int = 1):
             pdf_paths.append(str(final_pdf))
 
         docs = library.add_paths(pdf_paths)
+        if file_kind == "ppt":
+            for doc, result in zip(docs, converted):
+                ppt_sources[doc.id] = {
+                    "basePdf": result["basePdf"],
+                    "currentPdf": result["path"],
+                    "targetDir": result["targetDir"],
+                    "nup": 1,
+                }
         return jsonify({
             "cancelled": False,
             "converted": converted,
-            "documents": [describe_doc(doc) for doc in docs],
+            "documents": [describe_ppt_doc(doc) if file_kind == "ppt" else describe_doc(doc) for doc in docs],
         })
     except Exception as exc:
         write_error_log(exc)
@@ -133,6 +172,8 @@ def convert_office_save(file_kind: str, nup: int = 1):
 def convert_source_to_final_pdf(source: str | Path, target_dir: Path, nup: int) -> tuple[Path, dict]:
     converted_pdf = unique_pdf_path(target_dir, Path(source).name)
     result = convert_office_to_pdf(source, converted_pdf)
+    result["basePdf"] = str(converted_pdf)
+    result["targetDir"] = str(target_dir)
     if nup <= 1:
         return converted_pdf, result
     nup_pdf = unique_pdf_path(target_dir, f"{converted_pdf.stem}-{nup}合1.pdf")
@@ -141,6 +182,13 @@ def convert_source_to_final_pdf(source: str | Path, target_dir: Path, nup: int) 
     result["path"] = str(nup_pdf)
     result["name"] = nup_pdf.name
     return nup_pdf, result
+
+
+def describe_ppt_doc(doc):
+    data = describe_doc(doc)
+    data["kind"] = "ppt"
+    data["nup"] = ppt_sources.get(doc.id, {}).get("nup", 1)
+    return data
 
 
 def convert_source_to_requested_output(source: str | Path, output: str | Path, nup: int) -> dict:

@@ -13,6 +13,7 @@ const state = {
 const els = {
   addFiles: document.querySelector("#add-files"),
   pptAdd: document.querySelector("#ppt-add"),
+  pptRefresh: document.querySelector("#ppt-refresh"),
   pptSave: document.querySelector("#ppt-save"),
   wordAdd: document.querySelector("#word-add"),
   wordSave: document.querySelector("#word-save"),
@@ -37,6 +38,7 @@ const els = {
 
 els.addFiles.addEventListener("click", addFiles);
 els.pptAdd.addEventListener("click", () => convertOffice("ppt", "add"));
+els.pptRefresh.addEventListener("click", refreshPptFormat);
 els.pptSave.addEventListener("click", () => convertOffice("ppt", "save"));
 els.wordAdd.addEventListener("click", () => convertOffice("word", "add"));
 els.wordSave.addEventListener("click", () => convertOffice("word", "save"));
@@ -69,8 +71,11 @@ async function convertOffice(kind, mode) {
   const action = mode === "add" ? "并加入编辑区" : "并保存";
   const label = isPpt ? "PPT" : "Word";
   const nup = isPpt ? Number.parseInt(els.pptNup.value, 10) : 1;
-  const nupText = isPpt && nup > 1 ? `，${nup}合1` : "";
-  setBusy(true, `正在转换 ${label}`, `正在生成 PDF${nupText}${action}。`);
+  const nupText = isPpt && mode === "save" && nup > 1 ? `，${nup}合1` : "";
+  const detail = isPpt && mode === "add"
+    ? "正在生成基础 PDF。导入后可选择合并方式并刷新预览。"
+    : `正在生成 PDF${nupText}${action}。`;
+  setBusy(true, `正在转换 ${label}`, detail);
   try {
     const data = await api(`/api/convert-${kind}-${mode}`, { nup });
     if (data.cancelled) return;
@@ -91,7 +96,7 @@ async function convertOffice(kind, mode) {
 
 function addDocumentsToWorkspace(documents) {
   for (const doc of documents) {
-    state.documents.set(doc.id, { ...doc, pdf: null });
+    state.documents.set(doc.id, { ...doc, pdf: null, revision: 0 });
     for (let i = 0; i < doc.pages; i += 1) {
       state.pages.push({
         key: crypto.randomUUID(),
@@ -101,6 +106,59 @@ function addDocumentsToWorkspace(documents) {
       });
     }
   }
+  renderFiles();
+  renderPages();
+}
+
+async function refreshPptFormat() {
+  const pptDocs = [...state.documents.values()].filter((doc) => doc.kind === "ppt");
+  if (!pptDocs.length) {
+    toast("当前编辑区没有可刷新的 PPT 文件。", true);
+    return;
+  }
+  const nup = Number.parseInt(els.pptNup.value, 10);
+  const nupText = nup > 1 ? `${nup}合1` : "不合并";
+  setBusy(true, "正在刷新 PPT 格式", `正在重新生成 ${nupText} 并更新预览。`);
+  try {
+    const data = await api("/api/refresh-ppt-nup", {
+      nup,
+      docIds: pptDocs.map((doc) => doc.id),
+    });
+    if (data.cancelled) return;
+    replaceDocumentsInWorkspace(data.documents);
+    toast(`已刷新 ${data.documents.length} 个 PPT 文件为 ${nupText}`);
+  } catch (err) {
+    toast(err.message, true);
+  } finally {
+    setBusy(false);
+  }
+}
+
+function replaceDocumentsInWorkspace(documents) {
+  for (const doc of documents) {
+    const oldDoc = state.documents.get(doc.id);
+    const nextDoc = {
+      ...doc,
+      pdf: null,
+      revision: (oldDoc?.revision || 0) + 1,
+    };
+    state.documents.set(doc.id, nextDoc);
+
+    const firstIndex = state.pages.findIndex((page) => page.fileId === doc.id);
+    state.pages = state.pages.filter((page) => page.fileId !== doc.id);
+    const newPages = [];
+    for (let i = 0; i < doc.pages; i += 1) {
+      newPages.push({
+        key: crypto.randomUUID(),
+        fileId: doc.id,
+        pageIndex: i,
+        rotation: 0,
+      });
+    }
+    const insertAt = firstIndex >= 0 ? firstIndex : state.pages.length;
+    state.pages.splice(insertAt, 0, ...newPages);
+  }
+  state.selected.clear();
   renderFiles();
   renderPages();
 }
@@ -145,7 +203,7 @@ function renderFiles() {
     card.className = "file-card";
     card.innerHTML = `
       <div class="file-name">${escapeHtml(doc.name)}</div>
-      <div class="file-meta">${doc.pages} 页${doc.encrypted ? " · 已加密" : ""}</div>
+      <div class="file-meta">${doc.pages} 页${doc.kind === "ppt" ? ` · PPT · ${formatNup(doc.nup)}` : ""}${doc.encrypted ? " · 已加密" : ""}</div>
     `;
     els.fileList.appendChild(card);
   }
@@ -154,7 +212,7 @@ function renderFiles() {
 async function renderThumb(page, canvas) {
   const doc = state.documents.get(page.fileId);
   if (!doc.pdf) {
-    doc.pdf = await pdfjsLib.getDocument({ url: `/api/file/${doc.id}` }).promise;
+    doc.pdf = await pdfjsLib.getDocument({ url: `/api/file/${doc.id}?v=${doc.revision || 0}` }).promise;
   }
   const pdfPage = await doc.pdf.getPage(page.pageIndex + 1);
   const viewport = pdfPage.getViewport({ scale: 0.24, rotation: page.rotation });
@@ -321,17 +379,23 @@ function refreshControls() {
   els.rotateRight.disabled = state.busy || !hasSelection;
   els.deletePages.disabled = state.busy || !hasSelection;
   els.clearSelect.disabled = state.busy || !hasSelection;
+  els.pptRefresh.disabled = state.busy || ![...state.documents.values()].some((doc) => doc.kind === "ppt");
 }
 
 function setBusy(busy, title = "正在处理", detail = "请稍候...") {
   state.busy = busy;
-  for (const control of [els.addFiles, els.pptAdd, els.pptSave, els.wordAdd, els.wordSave, els.pptNup]) {
+  for (const control of [els.addFiles, els.pptAdd, els.pptRefresh, els.pptSave, els.wordAdd, els.wordSave, els.pptNup]) {
     control.disabled = busy;
   }
   els.busyTitle.textContent = title;
   els.busyDetail.textContent = detail;
   els.busyOverlay.hidden = !busy;
   refreshControls();
+}
+
+function formatNup(nup) {
+  const value = Number.parseInt(nup || 1, 10);
+  return value > 1 ? `${value}合1` : "不合并";
 }
 
 function toast(message, isError = false) {

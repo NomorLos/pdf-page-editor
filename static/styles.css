@@ -147,6 +147,12 @@ h1 {
   font-weight: 650;
 }
 
+.side-hint {
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
 .file-card {
   border: 1px solid var(--line);
   border-radius: 8px;

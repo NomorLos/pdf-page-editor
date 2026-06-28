@@ -42,3 +42,21 @@ def test_export_and_split_with_chinese_paths(tmp_path):
     assert len(split) == 1
     assert Path(split[0]["path"]).exists()
     assert split[0]["pages"] == 2
+
+
+def test_replace_path_keeps_document_id_and_refreshes_page_count(tmp_path):
+    source_dir = tmp_path / "中文 刷新"
+    source_dir.mkdir(parents=True)
+    first = source_dir / "原始.pdf"
+    second = source_dir / "刷新后.pdf"
+    make_pdf(first, 4)
+    make_pdf(second, 2)
+
+    library = PdfLibrary()
+    doc = library.add_paths([first])[0]
+    refreshed = library.replace_path(doc.id, second)
+
+    assert refreshed.id == doc.id
+    assert refreshed.path == second
+    assert refreshed.pages == 2
+    assert library.get(doc.id).path == second

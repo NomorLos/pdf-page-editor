@@ -41,6 +41,20 @@ class PdfLibrary:
     def get(self, doc_id: str) -> PdfDocument:
         return self._docs[doc_id]
 
+    def replace_path(self, doc_id: str, path: str | Path, name: str | None = None) -> PdfDocument:
+        old_doc = self._docs[doc_id]
+        new_path = Path(path)
+        reader = _reader_for(new_path)
+        doc = PdfDocument(
+            id=doc_id,
+            path=new_path,
+            name=name or new_path.name,
+            pages=len(reader.pages),
+            encrypted=reader.is_encrypted,
+        )
+        self._docs[old_doc.id] = doc
+        return doc
+
     def all(self) -> list[PdfDocument]:
         return list(self._docs.values())
 
