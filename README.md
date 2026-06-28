@@ -45,6 +45,6 @@ powershell -ExecutionPolicy Bypass -File .\build_exe.ps1
 
 ## 说明
 
-- 这个工具只做页面级编辑，不直接修改 PDF 原有文字内容。
+- 该项目做页面级编辑，不对内容修改。
 - 默认不会覆盖原文件，导出时会弹出系统另存为窗口。
 - 前端预览使用本地内置 PDF.js，不依赖联网。
