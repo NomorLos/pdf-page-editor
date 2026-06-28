@@ -111,7 +111,7 @@ function renderFiles() {
 async function renderThumb(page, canvas) {
   const doc = state.documents.get(page.fileId);
   if (!doc.pdf) {
-    doc.pdf = await pdfjsLib.getDocument(`/api/file/${doc.id}`).promise;
+    doc.pdf = await pdfjsLib.getDocument({ url: `/api/file/${doc.id}` }).promise;
   }
   const pdfPage = await doc.pdf.getPage(page.pageIndex + 1);
   const viewport = pdfPage.getViewport({ scale: 0.24, rotation: page.rotation });
